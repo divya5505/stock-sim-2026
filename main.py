@@ -1,9 +1,20 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware # <--- NEW IMPORT
 from app.database import init_db
-from app.routes import market, teams, news  # <--- 1. Import 'news'
-from app.services.market_maker import start_market_maker # <--- 2. Import the Background Service
+from app.routes import market, teams, news
+from app.services.market_maker import start_market_maker
 
 app = FastAPI()
+
+# --- CORS CONFIGURATION (The React Connection) ---
+# This allows the React app (running on a different URL) to talk to this API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows any website to connect (safest for the event)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 async def start_system():
@@ -18,7 +29,7 @@ async def start_system():
 # Register all routes
 app.include_router(market.router, prefix="/api", tags=["Market"])
 app.include_router(teams.router, prefix="/api/teams", tags=["Teams"])
-app.include_router(news.router, prefix="/api/news", tags=["News"]) # <--- 3. Register News
+app.include_router(news.router, prefix="/api/news", tags=["News"])
 
 @app.get("/")
 async def root():
