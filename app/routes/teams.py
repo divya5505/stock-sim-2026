@@ -1,68 +1,43 @@
 from fastapi import APIRouter, HTTPException, Body
-from app.models.team import Team
-from app.models.stock import Stock
+from app.models.team import Team, TeamMember # Import the new class
+from pydantic import BaseModel
+from typing import List
 
 router = APIRouter()
 
-# --- 1. ADMIN REGISTRATION ---
+# 1. DEFINE THE INPUT FORMAT
+class TeamRegisterRequest(BaseModel):
+    team_id: str            # From "Team Username"
+    name: str               # From "Team Name"
+    password: str           # From "Team Password"
+    members: List[TeamMember] # The list of student details
+
+# 2. THE REGISTRATION ENDPOINT
 @router.post("/register")
-async def register_team(team_id: str, name: str, password: str):
-    exists = await Team.find_one(Team.team_id == team_id)
-    if exists:
-        raise HTTPException(status_code=400, detail="Team ID taken")
+async def register_team(data: TeamRegisterRequest):
+    # Check for duplicates
+    existing_team = await Team.find_one(Team.team_id == data.team_id)
+    if existing_team:
+        raise HTTPException(status_code=400, detail="Team Username already taken")
+
+    # Create the new team
+    new_team = Team(
+        team_id=data.team_id,
+        name=data.name,
+        password=data.password,
+        members=data.members, # Saves the full list of details
+        cash_balance=100000.0,
+        portfolio=[]
+    )
     
-    new_team = Team(team_id=team_id, name=name, password=password)
     await new_team.insert()
-    return {"message": f"Team {name} registered"}
+    
+    return {"message": "Team registered successfully", "team_id": data.team_id}
 
-# --- 2. TEAM LOGIN ---
-@router.post("/login")
-async def team_login(team_id: str = Body(), password: str = Body()):
+# 3. GET TEAM INFO
+@router.get("/{team_id}")
+async def get_team(team_id: str):
     team = await Team.find_one(Team.team_id == team_id)
-    if not team or team.password != password:
-        raise HTTPException(status_code=401, detail="Invalid Credentials")
-    
-    return {
-        "status": "success",
-        "team_name": team.name,
-        "cash": round(team.cash_balance, 2),
-        "portfolio": team.portfolio
-    }
-
-# --- 3. SMART LEADERBOARD ---
-@router.get("/leaderboard")
-async def get_leaderboard():
-    teams = await Team.find_all().to_list()
-    stocks = await Stock.find_all().to_list()
-    
-    # 1. DEBUG PRINT: Check your terminal when you run this!
-    print(f"👀 DEBUG: Database returned {len(teams)} teams.")
-
-    # 2. Get current prices
-    price_map = {s.ticker: s.current_price for s in stocks}
-    
-    leaderboard_data = []
-    
-    for t in teams:
-        # Calculate Stock Value
-        stock_value = 0.0
-        for item in t.portfolio:
-            if item.ticker in price_map:
-                current_price = price_map[item.ticker]
-                stock_value += item.quantity * current_price
-        
-        # Total Net Worth = Cash + Stock Assets
-        total_net_worth = t.cash_balance + stock_value
-        
-        leaderboard_data.append({
-            "team_id": t.team_id,
-            "name": t.name,
-            "cash": round(t.cash_balance, 2),
-            "stock_value": round(stock_value, 2),
-            "total_net_worth": round(total_net_worth, 2)
-        })
-    
-    # Sort by Net Worth (Highest First)
-    sorted_teams = sorted(leaderboard_data, key=lambda x: x["total_net_worth"], reverse=True)
-    
-    return sorted_teams
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    return team
