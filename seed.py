@@ -62,6 +62,11 @@ async def seed_data():
             ticker=s["ticker"], 
             company_name=s["name"], 
             base_price=s["price"], 
+            
+            # --- NEW FIELDS (Required for Simulation) ---
+            current_price=s["price"], # Start price = Base price
+            sensitivity=0.005,        # 0.5% impact per trade (Adjust if needed)
+            
             dealer_inventory=0
         ).insert()
 

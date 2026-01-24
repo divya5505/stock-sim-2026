@@ -42,6 +42,7 @@ async def update_prices():
             # is calculated dynamically as (base_price - dealer_impact)
             stock.base_price = stock.base_price * math.exp(shock)
             
+            
             # 4. Save to DB
             await stock.save()
 

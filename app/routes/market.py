@@ -2,24 +2,37 @@ from fastapi import APIRouter, HTTPException, Body
 from app.models.stock import Stock
 from app.models.team import Team, PortfolioItem
 from app.models.dealer import Dealer
+from typing import List
 
 router = APIRouter()
 
 # --- CONFIGURATION ---
-MAX_SHARES_PER_TEAM = 1000 # Hard Regulatory Limit (Anti-Monopoly)
-MIN_PRICE_FLOOR = 5.0      # Circuit Breaker Floor (Anti-Crash)
+MAX_SHARES_PER_TEAM = 10000
+MIN_PRICE_FLOOR = 5.0      
 
 # --- 1. GET PRICES ---
 @router.get("/prices")
 async def get_prices():
     stocks = await Stock.find_all().to_list()
-    return [{
-        "ticker": s.ticker,
-        "price": round(s.current_price, 2),
-        "trend": "UP" if s.dealer_inventory < 0 else "DOWN" 
-    } for s in stocks]
+    
+    response_data = []
+    
+    for s in stocks:
+        # Trend is based on price movement relative to the day's start
+        trend_direction = "UP" if s.current_price >= s.base_price else "DOWN"
+        display_name = getattr(s, 'name', s.ticker) 
 
-# --- 2. EXECUTE TRADE (With Security Checks) ---
+        response_data.append({
+            "ticker": s.ticker,
+            "company_name": display_name,
+            "current_price": round(s.current_price, 2),
+            "base_price": round(s.base_price, 2), 
+            "trend": trend_direction
+        })
+        
+    return response_data
+
+# --- 2. EXECUTE TRADE (FIXED LOGIC) ---
 @router.post("/trade")
 async def trade_stock(
     team_id: str = Body(),
@@ -44,12 +57,9 @@ async def trade_stock(
         raise HTTPException(status_code=404, detail="Team or Stock not found")
 
     # --- SECURITY CHECKS ---
-    
-    # Check 1: The "Suicide Bomber" Fix (Price Floor)
     if side == "sell" and stock.current_price <= MIN_PRICE_FLOOR:
         raise HTTPException(status_code=400, detail="Market Halted: Price too low to sell!")
 
-    # Check 2: The "Monopoly" Fix (Absolute Cap)
     if side == "buy":
         current_holding = 0
         for item in team.portfolio:
@@ -57,32 +67,45 @@ async def trade_stock(
                 current_holding = item.quantity
                 break
         
-        # If buying exceeds 1000 shares total -> REJECT
         if (current_holding + quantity) > MAX_SHARES_PER_TEAM:
              raise HTTPException(
                  status_code=400, 
                  detail=f"REGULATORY LIMIT: You cannot hold more than {MAX_SHARES_PER_TEAM} shares of {ticker}!"
              )
-    # -----------------------
 
-    # B. CALCULATE SLIPPAGE
-    start_inventory = stock.dealer_inventory
-    start_price = stock.base_price - (stock.sensitivity * start_inventory)
-    # Ensure floor applies to math
-    start_price = max(MIN_PRICE_FLOOR, start_price)
+    # --- B. CALCULATE SLIPPAGE (CORRECTED) ---
+    # 1. Start from the CURRENT market price (includes Random Walk history)
+    start_price = stock.current_price
+    
+    
+    # 2. Calculate impact (Sensitivity * Quantity)
+    # Higher sensitivity = Price moves more per share traded
+    impact = stock.sensitivity * quantity
     
     if side == "buy":
-        end_inventory = start_inventory - quantity
-    else:
-        end_inventory = start_inventory + quantity
+        # Buying pushes price UP
+        end_price = start_price + impact
+        # Dealer sells to you, inventory drops
+        end_inventory = stock.dealer_inventory - quantity
+    else: 
+        # Selling pushes price DOWN
+        end_price = start_price - impact
+        # Dealer buys from you, inventory rises
+        end_inventory = stock.dealer_inventory + quantity
         
-    end_price = stock.base_price - (stock.sensitivity * end_inventory)
+    # 3. Apply Safety Floors
+    start_price = max(MIN_PRICE_FLOOR, start_price)
     end_price = max(MIN_PRICE_FLOOR, end_price)
     
+    # 4. Calculate Average Execution Price
     avg_price = (start_price + end_price) / 2
     total_cost = avg_price * quantity
+    
+    # IMPORTANT: Update the stock's state!
+    stock.current_price = end_price
+    stock.dealer_inventory = end_inventory
 
-    # C. EXECUTE TRANSACTION
+    # --- C. EXECUTE TRANSACTION ---
     if side == "buy":
         if team.cash_balance < total_cost:
             raise HTTPException(status_code=400, detail="Not enough cash!")
@@ -107,8 +130,6 @@ async def trade_stock(
                 quantity=quantity,
                 average_buy_price=avg_price
             ))
-            
-        stock.dealer_inventory = end_inventory 
 
     elif side == "sell":
         found = False
@@ -126,8 +147,8 @@ async def trade_stock(
              raise HTTPException(status_code=400, detail="You don't own this stock")
              
         team.cash_balance += total_cost
-        stock.dealer_inventory = end_inventory
 
+    # Save changes to DB
     await team.save()
     await stock.save()
 
@@ -136,5 +157,6 @@ async def trade_stock(
         "ticker": ticker,
         "side": side,
         "execution_price_avg": round(avg_price, 2),
-        "new_cash_balance": round(team.cash_balance, 2)
+        "new_cash_balance": round(team.cash_balance, 2),
+        "new_market_price": round(end_price, 2)
     }

@@ -26,11 +26,18 @@ async def start_system():
     # This makes the market "alive" even when no one is trading
     await start_market_maker() 
 
-# Register all routes
-app.include_router(market.router, prefix="/api", tags=["Market"])
+# 1. The Correct "Canonical" Routes (As per your documentation)
 app.include_router(teams.router, prefix="/api/teams", tags=["Teams"])
+app.include_router(market.router, prefix="/api/stocks", tags=["Stocks"]) # or /api/prices if you prefer
+# app.include_router(dealer.router, prefix="/api/dealer", tags=["Dealer"])
 app.include_router(news.router, prefix="/api/news", tags=["News"])
 
+# 2. The "Compatibility Layer" (Fixing the Frontend Mismatch)
+# The frontend is asking for /api/v1/stocks/prices. 
+# By mounting the SAME router to this prefix, we redirect their requests to the right logic.
+app.include_router(market.router, prefix="/api/v1/stocks", tags=["Stocks (Legacy Support)"])
+app.include_router(teams.router, prefix="/api/v1/teams", tags=["Teams"])
+app.include_router(news.router, prefix="/api/v1/news", tags=["News"])
 @app.get("/")
 async def root():
     return {"message": "Stock Market Simulator 2.0 is Live"}

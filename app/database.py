@@ -1,28 +1,31 @@
-import os  # <--- Required to read the environment variable
+import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
+
+# --- IMPORT MODELS ---
 from app.models.stock import Stock
 from app.models.team import Team
 from app.models.dealer import Dealer
 from app.models.scenario import Scenario
 from app.models.news import NewsFlash 
 
-async def init_db():
-    # 1. GET THE URL
-    # Priority: Check if 'seed.py' or DigitalOcean provided a specific link.
-    # If not found, default to localhost.
-    mongo_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+# --- THE HARDCODED CLOUD URL ---
+# This guarantees the app CANNOT connect to localhost.
+ATLAS_URL = "mongodb+srv://Divya:Dayal2005@cluster0.e2ibnmi.mongodb.net/stock_market_simulator?appName=Cluster0&retryWrites=true&w=majority"
 
-    # 2. Create the client
-    client = AsyncIOMotorClient(mongo_url)
+async def init_db():
+    print(f"\n🔌 ATTEMPTING CONNECTION TO CLOUD...")
+    print(f"🌍 Target URL: {ATLAS_URL[:40]}...")
+
+    # 1. Direct Connection (No os.getenv, no localhost fallback)
+    client = AsyncIOMotorClient(ATLAS_URL)
     
-    # 3. Select the database
-    # Note: If the URL includes the db name (like in config.py), motor handles it. 
-    # But we explicitly select it here to be safe.
+    # 2. Select Database
     database = client.stock_market_simulator
 
-    # 4. Initialize Beanie
+    # 3. Initialize
     await init_beanie(
         database=database, 
         document_models=[Stock, Team, Dealer, Scenario, NewsFlash]
     )
+    print("✅ SUCCESS! Connected to MongoDB Atlas (Cloud). Localhost is ignored.\n")
