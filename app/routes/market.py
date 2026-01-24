@@ -1,8 +1,13 @@
 from fastapi import APIRouter, HTTPException, Body
+from pydantic import BaseModel
+from typing import List
+
+# --- IMPORTS ---
 from app.models.stock import Stock
 from app.models.team import Team, PortfolioItem
 from app.models.dealer import Dealer
-from typing import List
+
+from beanie.operators import Set
 
 router = APIRouter()
 
@@ -10,7 +15,32 @@ router = APIRouter()
 MAX_SHARES_PER_TEAM = 10000
 MIN_PRICE_FLOOR = 5.0      
 
-# --- 1. GET PRICES ---
+# --- NEW: DEALER LOGIN MODEL ---
+class DealerLoginRequest(BaseModel):
+    username: str
+    password: str
+
+# --- 1. DEALER LOGIN (Fixes the 404 Error) ---
+@router.post("/dealer/login")
+async def dealer_login(data: DealerLoginRequest):
+    # 1. Find Dealer
+    dealer = await Dealer.find_one(Dealer.username == data.username)
+    
+    # 2. Validate Credentials
+    if not dealer:
+        raise HTTPException(status_code=401, detail="Invalid username")
+        
+    if dealer.password != data.password:
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    # 3. Success
+    return {
+        "message": "Login successful", 
+        "username": dealer.username,
+        "role": "dealer"
+    }
+
+# --- 2. GET PRICES ---
 @router.get("/prices")
 async def get_prices():
     stocks = await Stock.find_all().to_list()
@@ -32,7 +62,7 @@ async def get_prices():
         
     return response_data
 
-# --- 2. EXECUTE TRADE (FIXED LOGIC) ---
+# --- 3. EXECUTE TRADE (FIXED LOGIC) ---
 @router.post("/trade")
 async def trade_stock(
     team_id: str = Body(),
@@ -51,8 +81,9 @@ async def trade_stock(
         raise HTTPException(status_code=400, detail="Quantity must be positive")
     
     stock = await Stock.find_one(Stock.ticker == ticker)
+
     team = await Team.find_one(Team.team_id == team_id)
-    
+       
     if not stock or not team:
         raise HTTPException(status_code=404, detail="Team or Stock not found")
 
@@ -75,7 +106,7 @@ async def trade_stock(
 
     # --- B. CALCULATE SLIPPAGE (CORRECTED) ---
     # 1. Start from the CURRENT market price (includes Random Walk history)
-    start_price = stock.current_price
+    start_price = stock.base_price
     
     
     # 2. Calculate impact (Sensitivity * Quantity)
@@ -102,8 +133,10 @@ async def trade_stock(
     total_cost = avg_price * quantity
     
     # IMPORTANT: Update the stock's state!
-    stock.current_price = end_price
-    stock.dealer_inventory = end_inventory
+    await stock.update(Set({Stock.base_price: end_price}))
+    await stock.update(Set({Stock.dealer_inventory: end_inventory}))
+
+
 
     # --- C. EXECUTE TRANSACTION ---
     if side == "buy":

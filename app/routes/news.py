@@ -1,5 +1,8 @@
+import datetime
 from fastapi import APIRouter, HTTPException
 from typing import List
+
+from pydantic import BaseModel
 
 # Import Models
 from app.models.news import NewsFlash
@@ -61,3 +64,47 @@ async def publish_scenario(scenario_id: str):
         "stock_impacted": scenario.ticker,
         "new_price_base": new_price
     }
+
+class NewsCreateRequest(BaseModel):
+    scenario_id: str
+    headline: str
+    ticker: str
+    sentiment: float  # e.g., 0.5 for Positive, -0.5 for Negative
+
+# --- 2. THE CREATE ROUTE ---
+@router.post("/")
+async def create_news_scenario(data: NewsCreateRequest):
+    print(f"📰 [DEBUG] New Scenario Request: {data.headline}")
+
+    # A. Logic: Convert numeric 'sentiment' to string 'impact'
+    # If sentiment > 0 -> POSITIVE (Green)
+    # If sentiment < 0 -> NEGATIVE (Red)
+    # If sentiment == 0 -> INFO (Blue)
+    impact_str = "INFO"
+    if data.sentiment > 0:
+        impact_str = "POSITIVE"
+    elif data.sentiment < 0:
+        impact_str = "NEGATIVE"
+
+    # B. Create the Database Object
+    # Note: We are ignoring 'scenario_id' and 'ticker' here because 
+    # your NewsFlash model doesn't have fields for them yet. 
+    # If you want to save them, you must add those fields to app/models/news.py first!
+    new_flash = NewsFlash(
+        headline=data.headline,
+        impact=impact_str,
+    )
+
+    # C. Save to Database
+    await new_flash.save()
+    
+    print(f"✅ [DEBUG] Saved News: {new_flash.id}")
+
+    return {"message": "Scenario created successfully", "id": str(new_flash.id)}
+
+# --- 3. GET ALL NEWS (Optional, for your list) ---
+@router.get("/")
+async def get_all_news():
+    # Returns newest news first
+    news_list = await NewsFlash.find_all().sort(-NewsFlash.created_at).to_list()
+    return news_list

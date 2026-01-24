@@ -22,5 +22,5 @@ class Stock(Document):
         raw_price = self.base_price - (self.sensitivity * self.dealer_inventory)
         
         # 2. Apply Security Floor (Circuit Breaker)
-        # Price can never mathematically drop below ₹5.00
+        # Price can never mathematically drop below  ₹5.00
         return max(5.0, raw_price)

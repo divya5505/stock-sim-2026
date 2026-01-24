@@ -6,12 +6,18 @@ from app.services.market_maker import start_market_maker
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:5500",      # VS Code Live Server
+    "http://127.0.0.1:5500",      # VS Code Live Server (IP version)
+    "http://localhost:8000",      # Your Backend (Self-communication)
+]
+
 # --- CORS CONFIGURATION (The React Connection) ---
 # This allows the React app (running on a different URL) to talk to this API.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows any website to connect (safest for the event)
-    allow_credentials=True,
+    # allow_credentials=True,
     allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
     allow_headers=["*"],
 )

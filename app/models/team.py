@@ -19,7 +19,7 @@ class PortfolioItem(BaseModel):
 class Team(Document):
     team_id: str = Field(..., unique=True) # Maps to "Team Username"
     name: str                              # Maps to "Team Name"
-    password: str = Field(..., exclude=True) 
+    password: str 
     cash_balance: float = 100000.0
     portfolio: List[PortfolioItem] = []
     

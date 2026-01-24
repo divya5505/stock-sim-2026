@@ -56,6 +56,41 @@ async def register_team(data: TeamRegisterRequest):
     
     return {"message": "Team registered successfully", "team_id": data.team_id}
 
+# --- 2.5 LOGIN TEAM ROUTE ---
+class TeamLoginRequest(BaseModel):
+    team_id: str
+    password: str
+
+@router.post("/login")
+async def login_team(data: TeamLoginRequest):
+    print(f"\n🔑 [DEBUG] LOGIN ATTEMPT: {data.team_id}") 
+
+    # 1. Find the Team
+    team = await Team.find_one(Team.team_id == data.team_id)
+    
+    # 2. Validation
+    if not team:
+        print("❌ [DEBUG] Login Failed: Team ID not found")
+        raise HTTPException(status_code=401, detail="Invalid Team ID")
+        
+    # 3. Check Password
+    # Note: In a real app we'd hash this, but for the event plain text is fine.
+    if team.password != data.password:
+        print("❌ [DEBUG] Login Failed: Wrong Password")
+        raise HTTPException(status_code=401, detail="Invalid Password")
+
+    print(f"✅ [DEBUG] LOGIN SUCCESS: {data.team_id}")
+    
+    # 4. Return Success & Team Info
+    return {
+        "status": "success",
+        "message": "Login successful",
+        "team_id": team.team_id,
+        "name": team.name,
+        "cash_balance": team.cash_balance,
+        "portfolio": team.portfolio
+    }
+
 # --- 3. GET TEAMS (Leaderboard) ---
 @router.get("/")
 async def get_teams():

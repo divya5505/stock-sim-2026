@@ -12,4 +12,4 @@ class NewsFlash(Document):
     created_at: datetime = Field(default_factory=datetime.now)
 
     class Settings:
-        name = "news"
+        name = "scenarios"
