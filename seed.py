@@ -3,7 +3,7 @@ import os
 from config import MONGODB_URL  # <--- IMPORTING FROM YOUR NEW FILE
 
 # FORCE THE APP TO USE THE CLOUD LINK
-os.environ["MONGODB_URL"] = MONGODB_URL
+# os.environ["MONGODB_URL"] = MONGODB_URL
 
 from app.database import init_db
 from app.models.dealer import Dealer
