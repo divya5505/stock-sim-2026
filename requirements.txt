@@ -3,3 +3,4 @@ beanie
 pydantic
 asyncio
 uvicorn
+motor
