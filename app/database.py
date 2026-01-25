@@ -11,7 +11,8 @@ from app.models.news import NewsFlash
 
 # --- THE HARDCODED CLOUD URL ---
 # This guarantees the app CANNOT connect to localhost.
-ATLAS_URL = "mongodb+srv://Divya:Dayal2005@cluster0.e2ibnmi.mongodb.net/stock_market_simulator?appName=Cluster0&retryWrites=true&w=majority"
+# ATLAS_URL = "mongodb+srv://Divya:Dayal2005@cluster0.e2ibnmi.mongodb.net/stock_market_simulator?appName=Cluster0&retryWrites=true&w=majority"
+ATLAS_URL = os.environ["MONGODB_URL"]
 
 async def init_db():
     print(f"\n🔌 ATTEMPTING CONNECTION TO CLOUD...")
