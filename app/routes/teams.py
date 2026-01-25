@@ -44,7 +44,7 @@ async def register_team(data: TeamRegisterRequest):
         team_id=data.team_id,
         name=data.name,
         password=data.password,
-        cash_balance=100000.0,
+        cash_balance=10000.0,
         portfolio=[],
         members=[] 
     )
