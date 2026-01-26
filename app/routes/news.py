@@ -19,9 +19,9 @@ class NewsCreateRequest(BaseModel):
     sentiment: float 
 
 # # 1. PUBLIC: Get News Feed
-# @router.get("/")
-# async def get_news() -> List[NewsFlash]:
-#     return await NewsFlash.find_all().sort(-NewsFlash.created_at).limit(10).to_list()
+@router.get("/")
+async def get_news() -> List[NewsFlash]:
+    return await NewsFlash.find_all().sort(-NewsFlash.created_at).limit(10).to_list()
 
 # 2. DEALER: Execute a Pre-Made Scenario
 @router.post("/publish/{scenario_id}")
