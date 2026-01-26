@@ -113,3 +113,6 @@ async def get_teams():
     
     leaderboard.sort(key=lambda x: x['total_worth'], reverse=True)
     return leaderboard
+
+
+    

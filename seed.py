@@ -92,7 +92,7 @@ async def seed_data():
             team_id=team_id, 
             name=name, 
             password=password, 
-            cash_balance=100000.0,
+            cash_balance=10000.0,
             portfolio=[]
         ).insert()
         credentials_log.append(f"Team: {team_id} | Pass: {password}")
