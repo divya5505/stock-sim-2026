@@ -20,7 +20,7 @@ class Team(Document):
     team_id: str = Field(..., unique=True) # Maps to "Team Username"
     name: str                              # Maps to "Team Name"
     password: str 
-    cash_balance: float = 100000.0
+    cash_balance: float = 10000.0
     portfolio: List[PortfolioItem] = []
     
     # NEW: Stores the list of detailed members
