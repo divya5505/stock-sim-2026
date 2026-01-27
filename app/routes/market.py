@@ -7,6 +7,7 @@ from app.models.stock import Stock
 from app.models.team import Team, PortfolioItem
 from app.models.dealer import Dealer
 from app.models.trade import Trade 
+from app.services.market_state import MarketState
 
 from beanie.operators import Set
 
@@ -69,6 +70,10 @@ async def trade_stock(
     dealer_id: str = Body(),
     dealer_password: str = Body()
 ):
+    # 1. CHECK MARKET STATUS (Add this at the very top)
+    if not MarketState.is_open:
+        raise HTTPException(status_code=403, detail="Market is currently CLOSED.")
+    
     # A. AUTHENTICATE
     dealer = await Dealer.find_one(Dealer.username == dealer_id)
     if not dealer or dealer.password != dealer_password:

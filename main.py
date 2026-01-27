@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware # <--- NEW IMPORT
 from app.database import init_db
 from app.routes import market, teams, news
 from app.services.market_maker import start_market_maker
+from app.routes import admin
+
 
 app = FastAPI()
 
@@ -42,6 +44,7 @@ app.include_router(market.router, prefix="/api/v1/stocks", tags=["Stocks (Legacy
 app.include_router(teams.router, prefix="/api/v1/teams", tags=["Teams (Legacy)"])
 app.include_router(news.router, prefix="/api/v1/news", tags=["News (Legacy)"])
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market (Trade)"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 @app.get("/")
 async def root():
