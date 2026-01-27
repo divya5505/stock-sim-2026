@@ -6,6 +6,7 @@ from typing import List
 from app.models.stock import Stock
 from app.models.team import Team, PortfolioItem
 from app.models.dealer import Dealer
+from app.models.trade import Trade 
 
 from beanie.operators import Set
 
@@ -15,32 +16,20 @@ router = APIRouter()
 MAX_SHARES_PER_TEAM = 10000
 MIN_PRICE_FLOOR = 5.0      
 
-# --- NEW: DEALER LOGIN MODEL ---
 class DealerLoginRequest(BaseModel):
     username: str
     password: str
 
-# --- 1. DEALER LOGIN (Fixes the 404 Error) ---
+# --- 1. DEALER LOGIN ---
 @router.post("/dealer/login")
 async def dealer_login(data: DealerLoginRequest):
-    # 1. Find Dealer
     dealer = await Dealer.find_one(Dealer.username == data.username)
-    
-    # 2. Validate Credentials
-    if not dealer:
-        raise HTTPException(status_code=401, detail="Invalid username")
-        
-    if dealer.password != data.password:
-        raise HTTPException(status_code=401, detail="Invalid password")
+    if not dealer or dealer.password != data.password:
+        raise HTTPException(status_code=401, detail="Invalid Credentials")
 
-    # 3. Success
-    return {
-        "message": "Login successful", 
-        "username": dealer.username,
-        "role": "dealer"
-    }
+    return {"message": "Success", "username": dealer.username, "role": "dealer"}
 
-# --- 2. GET PRICES ---
+# --- 2. GET PRICES (FIXED TREND LOGIC) ---
 @router.get("/prices")
 async def get_prices():
     stocks = await Stock.find_all().to_list()
@@ -48,21 +37,29 @@ async def get_prices():
     response_data = []
     
     for s in stocks:
-        # Trend is based on price movement relative to the day's start
-        trend_direction = "UP" if s.current_price >= s.base_price else "DOWN"
+        # LOGIC: Compare Current Price (T) vs Previous Price (T-1)
+        # If Current > Previous -> UP (Green)
+        # If Current < Previous -> DOWN (Red)
+        if s.current_price > s.previous_price:
+            trend_direction = "UP"
+        elif s.current_price < s.previous_price:
+            trend_direction = "DOWN"
+        else:
+            trend_direction = "FLAT" # No change
+
         display_name = getattr(s, 'name', s.ticker) 
 
         response_data.append({
             "ticker": s.ticker,
             "company_name": display_name,
             "current_price": round(s.current_price, 2),
-            "base_price": round(s.base_price, 2), 
+            "base_price": round(s.base_price, 2), # This is now the static "Day Open" price
             "trend": trend_direction
         })
         
     return response_data
 
-# --- 3. EXECUTE TRADE (FIXED LOGIC) ---
+# --- 3. EXECUTE TRADE ---
 @router.post("/trade")
 async def trade_stock(
     team_id: str = Body(),
@@ -81,13 +78,11 @@ async def trade_stock(
         raise HTTPException(status_code=400, detail="Quantity must be positive")
     
     stock = await Stock.find_one(Stock.ticker == ticker)
-
     team = await Team.find_one(Team.team_id == team_id)
        
     if not stock or not team:
         raise HTTPException(status_code=404, detail="Team or Stock not found")
 
-    # --- SECURITY CHECKS ---
     if side == "sell" and stock.current_price <= MIN_PRICE_FLOOR:
         raise HTTPException(status_code=400, detail="Market Halted: Price too low to sell!")
 
@@ -99,44 +94,39 @@ async def trade_stock(
                 break
         
         if (current_holding + quantity) > MAX_SHARES_PER_TEAM:
-             raise HTTPException(
-                 status_code=400, 
-                 detail=f"REGULATORY LIMIT: You cannot hold more than {MAX_SHARES_PER_TEAM} shares of {ticker}!"
-             )
+             raise HTTPException(status_code=400, detail=f"Limit exceeded for {ticker}")
 
-    # --- B. CALCULATE SLIPPAGE (CORRECTED) ---
-    # 1. Start from the CURRENT market price (includes Random Walk history)
-    start_price = stock.base_price
+    # --- B. CALCULATE SLIPPAGE (FIXED) ---
+    # 1. Start from the CURRENT price (Last traded price)
+    start_price = stock.current_price 
     
-    
-    # 2. Calculate impact (Sensitivity * Quantity)
-    # Higher sensitivity = Price moves more per share traded
+    # 2. Calculate impact
     impact = stock.sensitivity * quantity
     
     if side == "buy":
-        # Buying pushes price UP
         end_price = start_price + impact
-        # Dealer sells to you, inventory drops
         end_inventory = stock.dealer_inventory - quantity
     else: 
-        # Selling pushes price DOWN
         end_price = start_price - impact
-        # Dealer buys from you, inventory rises
         end_inventory = stock.dealer_inventory + quantity
         
     # 3. Apply Safety Floors
-    start_price = max(MIN_PRICE_FLOOR, start_price)
     end_price = max(MIN_PRICE_FLOOR, end_price)
+    start_price = max(MIN_PRICE_FLOOR, start_price)
     
-    # 4. Calculate Average Execution Price
+    # 4. Average Execution Price
     avg_price = (start_price + end_price) / 2
     total_cost = avg_price * quantity
     
-    # IMPORTANT: Update the stock's state!
-    await stock.update(Set({Stock.base_price: end_price}))
-    await stock.update(Set({Stock.dealer_inventory: end_inventory}))
-
-
+    # --- IMPORTANT UPDATE LOGIC ---
+    # 1. Previous Price becomes what Current Price WAS (History)
+    # 2. Current Price becomes the NEW End Price (Live)
+    # 3. Base Price is UNTOUCHED (It stays as the "Day Open" price)
+    await stock.update(Set({
+        Stock.previous_price: start_price,  # Save history for trend
+        Stock.current_price: end_price,     # Update live price
+        Stock.dealer_inventory: end_inventory
+    }))
 
     # --- C. EXECUTE TRANSACTION ---
     if side == "buy":
@@ -152,7 +142,7 @@ async def trade_stock(
                 new_val = current_val + total_cost
                 new_qty = item.quantity + quantity
                 
-                item.average_trade_price = new_val / new_qty
+                item.average_buy_price = new_val / new_qty
                 item.quantity = new_qty
                 found = True
                 break
@@ -181,9 +171,19 @@ async def trade_stock(
              
         team.cash_balance += total_cost
 
-    # Save changes to DB
     await team.save()
-    await stock.save()
+    
+    # --- SAVE HISTORY ---
+    new_trade = Trade(
+        team_id=team_id,
+        ticker=ticker,
+        side=side.upper(), 
+        quantity=quantity,
+        price=avg_price,   
+        total=total_cost,
+        dealer_id=dealer_id
+    )
+    await new_trade.insert()
 
     return {
         "status": "success",
@@ -193,3 +193,8 @@ async def trade_stock(
         "new_cash_balance": round(team.cash_balance, 2),
         "new_market_price": round(end_price, 2)
     }
+
+@router.get("/teams/{team_id}/trades")
+async def get_team_trades(team_id: str):
+    trades = await Trade.find(Trade.team_id == team_id).sort(-Trade.timestamp).to_list()
+    return trades

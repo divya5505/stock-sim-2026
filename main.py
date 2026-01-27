@@ -12,16 +12,13 @@ origins = [
     "http://localhost:8000",      # Your Backend (Self-communication)
 ]
 
-# --- CORS CONFIGURATION (The React Connection) ---
-# This allows the React app (running on a different URL) to talk to this API.
+# --- CORS CONFIGURATION ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows any website to connect (safest for the event)
-    # allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_origins=["*"],  
+    allow_methods=["*"],  
     allow_headers=["*"],
 )
-
 @app.on_event("startup")
 async def start_system():
     # A. Connect to Database
@@ -42,8 +39,10 @@ app.include_router(news.router, prefix="/api/news", tags=["News"])
 # The frontend is asking for /api/v1/stocks/prices. 
 # By mounting the SAME router to this prefix, we redirect their requests to the right logic.
 app.include_router(market.router, prefix="/api/v1/stocks", tags=["Stocks (Legacy Support)"])
-app.include_router(teams.router, prefix="/api/v1/teams", tags=["Teams"])
-app.include_router(news.router, prefix="/api/v1/news", tags=["News"])
+app.include_router(teams.router, prefix="/api/v1/teams", tags=["Teams (Legacy)"])
+app.include_router(news.router, prefix="/api/v1/news", tags=["News (Legacy)"])
+app.include_router(market.router, prefix="/api/v1/market", tags=["Market (Trade)"])
+
 @app.get("/")
 async def root():
     return {"message": "Stock Market Simulator 2.0 is Live"}

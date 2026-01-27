@@ -2,7 +2,7 @@ import asyncio
 import random
 import math
 from app.models.stock import Stock
-from beanie.operators import Set # <--- ADD THIS IMPORT
+from beanie.operators import Set 
 
 VOLATILITY_MAP = {
     "BLUE": 0.005, 
@@ -23,21 +23,31 @@ async def update_prices():
             continue
 
         for stock in stocks:
+            # 1. Get Volatility
             sigma = VOLATILITY_MAP.get(stock.ticker, 0.01)
             shock = random.gauss(0, sigma)
             
-            # 1. Calculate the New Price based on the Drift
-            # We use the current base_price as the starting point
-            new_price = stock.base_price * math.exp(shock)
+            # 2. CAPTURE HISTORY (Crucial for the Arrow)
+            # We save the price BEFORE the shock as 'previous_price'
+            price_t_minus_1 = stock.current_price 
+
+            # 3. CALCULATE NEW PRICE (The Fix)
+            # We apply the shock to the CURRENT price, not the base price.
+            # This ensures we don't erase the impact of recent trades or news.
+            new_price = price_t_minus_1 * math.exp(shock)
             
-            # 2. Safety Floor
+            # 4. Safety Floor
             if new_price < 5.0:
                 new_price = 5.0
 
-            # 3. ATOMIC UPDATE (The Fix)
-            # Instead of stock.save(), we tell MongoDB: "Set the price to X"
-            # This prevents it from accidentally overwriting a News Event.
-            await stock.update(Set({Stock.base_price: new_price}))
+            # 5. ATOMIC UPDATE
+            # - We update 'current_price' to the new value.
+            # - We update 'previous_price' to the old value (so the arrow works).
+            # - We DO NOT touch 'base_price' (that stays as the day's Open Price).
+            await stock.update(Set({
+                Stock.current_price: new_price,
+                Stock.previous_price: price_t_minus_1
+            }))
 
         await asyncio.sleep(5)
 
