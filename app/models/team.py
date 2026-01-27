@@ -13,7 +13,7 @@ class TeamMember(BaseModel):
 class PortfolioItem(BaseModel):
     ticker: str
     quantity: int
-    average_trade_price: float
+    average_buy_price: float
 
 # 3. THE MAIN TEAM DOCUMENT
 class Team(Document):

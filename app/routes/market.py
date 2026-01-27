@@ -148,7 +148,7 @@ async def trade_stock(
         found = False
         for item in team.portfolio:
             if item.ticker == ticker:
-                current_val = item.quantity * item.average_trade_price
+                current_val = item.quantity * item.average_buy_price
                 new_val = current_val + total_cost
                 new_qty = item.quantity + quantity
                 
@@ -161,7 +161,7 @@ async def trade_stock(
             team.portfolio.append(PortfolioItem(
                 ticker=ticker, 
                 quantity=quantity,
-                average_trade_price=avg_price
+                average_buy_price=avg_price
             ))
 
     elif side == "sell":

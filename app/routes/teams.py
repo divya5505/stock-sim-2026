@@ -15,7 +15,7 @@ class TeamRegisterRequest(BaseModel):
 # --- 2. REGISTER TEAM ROUTE ---
 @router.post("/register")
 async def register_team(data: TeamRegisterRequest):
-    print(f"\n👀 [DEBUG] RECEIVING REGISTRATION REQUEST: {data.team_id}") # DEBUG 1
+    print(f"\n👀 [DEBUG] RECEIVING REGISTRATION REQUEST: {data.team_id}") 
 
     # Validation
     if not data.team_id or not data.team_id.strip():
@@ -31,15 +31,15 @@ async def register_team(data: TeamRegisterRequest):
         raise HTTPException(status_code=400, detail="Password must be at least 4 chars")
 
     # Check Duplicates
-    print("🔍 [DEBUG] Checking for existing team in DB...") # DEBUG 2
+    print("🔍 [DEBUG] Checking for existing team in DB...") 
     existing_team = await Team.find_one(Team.team_id == data.team_id)
     
     if existing_team:
-        print(f"❌ [DEBUG] ERROR: Team {data.team_id} ALREADY EXISTS in database!") # DEBUG 3
+        print(f"❌ [DEBUG] ERROR: Team {data.team_id} ALREADY EXISTS in database!") 
         raise HTTPException(status_code=400, detail="Team ID already taken!")
 
     # Create Team
-    print("🛠 [DEBUG] Creating Team Object in memory...") # DEBUG 4
+    print("🛠 [DEBUG] Creating Team Object in memory...") 
     new_team = Team(
         team_id=data.team_id,
         name=data.name,
@@ -49,10 +49,10 @@ async def register_team(data: TeamRegisterRequest):
         members=[] 
     )
     
-    print("💾 [DEBUG] Attempting to SAVE to Database...") # DEBUG 5
+    print("💾 [DEBUG] Attempting to SAVE to Database...") 
     await new_team.save()
     
-    print(f"✅ [DEBUG] SUCCESS! Team {data.team_id} saved. ID: {new_team.id}") # DEBUG 6
+    print(f"✅ [DEBUG] SUCCESS! Team {data.team_id} saved. ID: {new_team.id}") 
     
     return {"message": "Team registered successfully", "team_id": data.team_id}
 
@@ -74,7 +74,6 @@ async def login_team(data: TeamLoginRequest):
         raise HTTPException(status_code=401, detail="Invalid Team ID")
         
     # 3. Check Password
-    # Note: In a real app we'd hash this, but for the event plain text is fine.
     if team.password != data.password:
         print("❌ [DEBUG] Login Failed: Wrong Password")
         raise HTTPException(status_code=401, detail="Invalid Password")
@@ -89,6 +88,34 @@ async def login_team(data: TeamLoginRequest):
         "name": team.name,
         "cash_balance": team.cash_balance,
         "portfolio": team.portfolio
+    }
+
+# --- 2.6 GET TEAM PORTFOLIO (NEW ENDPOINT) ---
+@router.get("/{team_id}/portfolio")
+async def get_team_portfolio(team_id: str):
+    print(f"💼 [DEBUG] Fetching Portfolio for: {team_id}")
+
+    # 1. Find the Team
+    team = await Team.find_one(Team.team_id == team_id)
+
+    # 2. Validation
+    if not team:
+        raise HTTPException(status_code=404, detail="Team ID not found")
+
+    # 3. Format the Holdings
+    formatted_holdings = []
+    for item in team.portfolio:
+        formatted_holdings.append({
+            "ticker": item.ticker,
+            "quantity": item.quantity,
+            "average_price": round(item.average_buy_price, 2)
+        })
+
+    # 4. Return Response
+    return {
+        "team_id": team.team_id,
+        "cash_balance": round(team.cash_balance, 2),
+        "holdings": formatted_holdings
     }
 
 # --- 3. GET TEAMS (Leaderboard) ---
@@ -113,6 +140,3 @@ async def get_teams():
     
     leaderboard.sort(key=lambda x: x['total_worth'], reverse=True)
     return leaderboard
-
-
-    
