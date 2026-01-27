@@ -3,7 +3,7 @@ import random
 import math
 from app.models.stock import Stock
 from beanie.operators import Set
-from app.services.market_state import MarketState 
+from app.models.config import MarketStatus
 
 VOLATILITY_MAP = {
     "BLUE": 0.005, 
@@ -21,7 +21,7 @@ async def update_prices():
     
     while True:
         # --- 1. SILENT CHECK ---
-        if not MarketState.is_open:
+        if not MarketStatus.is_open:
             # If we just switched from Open -> Closed, print ONCE.
             if was_open:
                 print("⏸ Market Maker Paused (Market Closed)")

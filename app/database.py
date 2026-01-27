@@ -9,6 +9,7 @@ from app.models.dealer import Dealer
 from app.models.scenario import Scenario
 from app.models.news import NewsFlash
 from app.models.trade import Trade  # <--- FIXED IMPORT (was app.routes.trade)
+from app.models.config import MarketStatus
 
 # ATLAS_URL = "mongodb+srv://Divya:Dayal2005@cluster0.e2ibnmi.mongodb.net/stock_market_simulator?appName=Cluster0&retryWrites=true&w=majority"
 ATLAS_URL = os.environ["MONGODB_URL"]
@@ -22,6 +23,6 @@ async def init_db():
 
     await init_beanie(
         database=database, 
-        document_models=[Stock, Team, Dealer, Scenario, NewsFlash, Trade]
+        document_models=[Stock, Team, Dealer, Scenario, NewsFlash, Trade, MarketStatus]
     )
     print("✅ SUCCESS! Connected to MongoDB Atlas (Cloud).\n")

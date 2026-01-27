@@ -7,9 +7,21 @@ import datetime
 from app.models.trade import Trade
 from app.models.team import Team
 from app.models.stock import Stock
-from app.services.market_state import MarketState
+from app.models.config import MarketStatus # <--- ENSURE THIS IS IMPORTED
 
 router = APIRouter()
+
+# --- HELPER: GET OR CREATE STATUS DOC ---
+async def get_status_doc():
+    """
+    Fetches the persistent market status from MongoDB.
+    If it doesn't exist (first run), creates it with default=True (Open).
+    """
+    status = await MarketStatus.find_one()
+    if not status:
+        status = MarketStatus(is_open=True)
+        await status.insert()
+    return status
 
 # --- 1. GET ALL TRADES (Enriched with Team Names) ---
 class AdminTradeResponse(BaseModel):
@@ -50,22 +62,27 @@ async def get_all_market_trades():
         
     return results
 
-# --- 2. MARKET STATUS CONTROL ---
+# --- 2. MARKET STATUS CONTROL (FIXED WITH MONGODB) ---
 @router.get("/market/status")
 async def get_market_status():
+    status_doc = await get_status_doc()
     return {
-        "is_open": MarketState.is_open,
-        "status": "OPEN" if MarketState.is_open else "CLOSED"
+        "is_open": status_doc.is_open,
+        "status": "OPEN" if status_doc.is_open else "CLOSED"
     }
 
 @router.post("/market/open")
 async def open_market():
-    MarketState.is_open = True
+    status_doc = await get_status_doc()
+    status_doc.is_open = True
+    await status_doc.save() # <--- Persist to DB
     return {"message": "Market is now OPEN", "status": "OPEN"}
 
 @router.post("/market/close")
 async def close_market():
-    MarketState.is_open = False
+    status_doc = await get_status_doc()
+    status_doc.is_open = False
+    await status_doc.save() # <--- Persist to DB
     return {"message": "Market is now CLOSED", "status": "CLOSED"}
 
 # --- 3. MARKET RESET (The "Big Red Button") ---
