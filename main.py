@@ -44,7 +44,7 @@ app.include_router(market.router, prefix="/api/v1/stocks", tags=["Stocks (Legacy
 app.include_router(teams.router, prefix="/api/v1/teams", tags=["Teams (Legacy)"])
 app.include_router(news.router, prefix="/api/v1/news", tags=["News (Legacy)"])
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market (Trade)"])
-app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 
 @app.get("/")
 async def root():
