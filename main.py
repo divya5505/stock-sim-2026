@@ -4,6 +4,7 @@ from app.database import init_db
 from app.routes import market, teams, news
 from app.services.market_maker import start_market_maker
 from app.routes import admin
+from app.routes import leaderboard
 
 
 app = FastAPI()
@@ -45,7 +46,7 @@ app.include_router(teams.router, prefix="/api/v1/teams", tags=["Teams (Legacy)"]
 app.include_router(news.router, prefix="/api/v1/news", tags=["News (Legacy)"])
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market (Trade)"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
-
+app.include_router(leaderboard.router, prefix="/api/v1/leaderboard", tags=["Leaderboard"])
 @app.get("/")
 async def root():
     return {"message": "Stock Market Simulator 2.0 is Live"}
