@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException
+import os
+import secrets
+from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from typing import List, Optional
 from pydantic import BaseModel
 import datetime
@@ -7,23 +10,46 @@ import datetime
 from app.models.trade import Trade
 from app.models.team import Team
 from app.models.stock import Stock
-from app.models.config import MarketStatus # <--- ENSURE THIS IS IMPORTED
+from app.models.config import MarketStatus
 
-router = APIRouter()
+# --- SECURITY SETUP ---
+security = HTTPBasic()
+
+def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
+    """
+    Checks if the user provided the correct Admin Username and Password.
+    Values are read from Environment Variables (DigitalOcean) or default to safe values.
+    """
+    # 1. Get the "Real" credentials from Environment Variables
+    #    (If not set, defaults are "admin" and "admin123")
+    correct_user = os.getenv("ADMIN_USERNAME", "admin") 
+    correct_password = os.getenv("ADMIN_PASSWORD", "admin123") 
+
+    # 2. Securely compare them (secrets.compare_digest prevents timing attacks)
+    is_user_correct = secrets.compare_digest(credentials.username, correct_user)
+    is_pass_correct = secrets.compare_digest(credentials.password, correct_password)
+
+    if not (is_user_correct and is_pass_correct):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+# --- APPLY SECURITY TO THE ROUTER ---
+# This single line protects EVERY endpoint below.
+router = APIRouter(dependencies=[Depends(verify_admin)])
 
 # --- HELPER: GET OR CREATE STATUS DOC ---
 async def get_status_doc():
-    """
-    Fetches the persistent market status from MongoDB.
-    If it doesn't exist (first run), creates it with default=True (Open).
-    """
     status = await MarketStatus.find_one()
     if not status:
         status = MarketStatus(is_open=True)
         await status.insert()
     return status
 
-# --- 1. GET ALL TRADES (Enriched with Team Names) ---
+# --- 1. GET ALL TRADES ---
 class AdminTradeResponse(BaseModel):
     trade_id: str
     team_id: str
@@ -37,21 +63,16 @@ class AdminTradeResponse(BaseModel):
 
 @router.get("/trades", response_model=List[AdminTradeResponse])
 async def get_all_market_trades():
-    # 1. Fetch all trades (newest first)
     trades = await Trade.find_all().sort(-Trade.timestamp).to_list()
-    
-    # 2. Fetch all teams to create a "Lookup Map" (ID -> Name)
-    #    This avoids doing N database queries for N trades.
     teams = await Team.find_all().to_list()
     team_map = {t.team_id: t.name for t in teams}
     
-    # 3. Build Response
     results = []
     for t in trades:
         results.append({
             "trade_id": str(t.id),
             "team_id": t.team_id,
-            "team_name": team_map.get(t.team_id, "Unknown Team"), # Lookup name
+            "team_name": team_map.get(t.team_id, "Unknown Team"),
             "ticker": t.ticker,
             "side": t.side,
             "quantity": t.quantity,
@@ -59,10 +80,9 @@ async def get_all_market_trades():
             "dealer_id": t.dealer_id,
             "timestamp": t.timestamp
         })
-        
     return results
 
-# --- 2. MARKET STATUS CONTROL (FIXED WITH MONGODB) ---
+# --- 2. MARKET STATUS CONTROL ---
 @router.get("/market/status")
 async def get_market_status():
     status_doc = await get_status_doc()
@@ -75,26 +95,19 @@ async def get_market_status():
 async def open_market():
     status_doc = await get_status_doc()
     status_doc.is_open = True
-    await status_doc.save() # <--- Persist to DB
+    await status_doc.save()
     return {"message": "Market is now OPEN", "status": "OPEN"}
 
 @router.post("/market/close")
 async def close_market():
     status_doc = await get_status_doc()
     status_doc.is_open = False
-    await status_doc.save() # <--- Persist to DB
+    await status_doc.save()
     return {"message": "Market is now CLOSED", "status": "CLOSED"}
 
-# --- 3. MARKET RESET (The "Big Red Button") ---
+# --- 3. MARKET RESET ---
 @router.post("/market/reset")
 async def reset_market():
-    """
-    WARNING: This wipes all progress.
-    1. Deletes all trades.
-    2. Resets Stocks to base price & 0 inventory.
-    3. Resets Teams to 10k cash & empty portfolio.
-    """
-    
     # A. Delete All Trades
     await Trade.delete_all()
     
@@ -113,4 +126,4 @@ async def reset_market():
         t.portfolio = []
         await t.save()
         
-    return {"message": "Market has been fully reset. Good luck for the next round!"}
+    return {"message": "Market has been fully reset."}
